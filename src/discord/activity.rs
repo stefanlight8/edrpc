@@ -39,6 +39,12 @@ pub struct ActivityAssets {
     pub small_url: Option<String>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ActivityButton {
+    pub label: Option<String>,
+    pub url: Option<String>
+}
+
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Activity {
     pub name: String,
@@ -69,4 +75,8 @@ pub struct Activity {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    
+    // дискорд позволяет добавить лишь 2 кнопки
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buttons: Option<Vec<ActivityButton>>,
 }
