@@ -1,6 +1,7 @@
-use std::path::Path;
-
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use {
+    std::path::Path,
+    tokio::io::{AsyncReadExt, AsyncWriteExt},
+};
 
 #[cfg(unix)]
 use crate::pipe::errors::PipeError;
