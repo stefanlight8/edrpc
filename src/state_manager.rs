@@ -71,15 +71,14 @@ impl GameStateManager {
         reader: &mut JournalReader,
         shutdown: Arc<Notify>,
     ) -> Result<Vec<rpc::Event>> {
-        let mut events: Vec<rpc::Event> = vec![];
-
         let entries = select! {
             entries = reader.poll() => entries,
             _ = shutdown.notified() => {
                 tracing::info!("shutdown received, stopping listen_journal");
-                return Ok(events);
+                return Ok(vec![]);
             },
         }?;
+        let mut events: Vec<rpc::Event> = Vec::with_capacity(entries.len());
 
         for entry in entries {
             match entry.event {
@@ -196,11 +195,7 @@ impl GameStateManager {
                     events.push(rpc::Event::LoadoutUpdate(Loadout::OnFoot));
                 }
                 elite::events::Event::Shutdown => {} // somehow make to rpc disable
-                elite::events::Event::StartJump {
-                    star_system: Some(star_system),
-                    ..
-                }
-                | elite::events::Event::SupercruiseEntry { star_system } => events.push(
+                elite::events::Event::SupercruiseEntry { star_system } => events.push(
                     rpc::Event::GameStateUpdate(GameState::Supercruise(Some(star_system))),
                 ),
                 elite::events::Event::SupercruiseDestinationDrop {
@@ -209,9 +204,9 @@ impl GameStateManager {
                 } => events.push(rpc::Event::GameStateUpdate(GameState::Location(
                     destination_localized.unwrap_or(destination),
                 ))),
-                elite::events::Event::SupercruiseExit { body, .. } => {
-                    events.push(rpc::Event::GameStateUpdate(GameState::Location(body)));
-                }
+                // elite::events::Event::SupercruiseExit { body, .. } => {
+                //    events.push(rpc::Event::GameStateUpdate(GameState::Location(body)));
+                //}
                 elite::events::Event::Touchdown {
                     nearest_destination: Some(nearest_destination),
                     nearest_localised,
@@ -230,6 +225,15 @@ impl GameStateManager {
                         station_name,
                     )));
                 }
+                elite::events::Event::Died => {
+                    events.push(rpc::Event::GameStateUpdate(GameState::Dead))
+                }
+                elite::events::Event::StartJump {
+                    star_system: Some(star_system),
+                    ..
+                } => events.push(rpc::Event::GameStateUpdate(GameState::JumpingTo(
+                    star_system,
+                ))),
                 elite::events::Event::Unknown => {}
                 unhandled => {
                     tracing::trace!("unhandled event: {:?}", unhandled);
