@@ -29,6 +29,7 @@ pub enum Event {
     CodexEntry {
         system: String,
     },
+    Died,
     Disembark {
         body: String,
         #[serde(alias = "SRV")]
