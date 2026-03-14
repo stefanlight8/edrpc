@@ -1,18 +1,14 @@
-use std::path::Path;
-
-use serde_json::json;
-use tracing::info;
-
-use crate::{
-    discord::activity::Activity,
-    pipe::errors::PipeError,
-    rpc::{
+use {
+    super::{
         errors::{HandshakeError, RpcError, TransportError},
         op_code::OpCode,
         payload::{Payload, RpcCommand},
         transport::RpcTransport,
         utils::get_nonce,
     },
+    crate::{discord::activity::Activity, pipe::errors::PipeError},
+    serde_json::json,
+    std::path::Path,
 };
 
 pub struct RpcClient {
@@ -34,6 +30,7 @@ impl RpcClient {
     }
 
     pub async fn handshake(&mut self) -> Result<(), HandshakeError> {
+        tracing::debug!("sending handshake");
         self.transport
             .send(
                 OpCode::Hello,
@@ -51,6 +48,9 @@ impl RpcClient {
                     expected: "READY",
                     got: evt,
                 });
+            }
+            Payload::Event { evt: Some(evt), .. } if evt == "READY" => {
+                tracing::info!("connected to rpc successfully");
             }
             Payload::Error { code, message } => {
                 return Err(HandshakeError::RpcError(RpcError { code, message }));

@@ -1,5 +1,7 @@
-use serde::{Deserialize, Serialize};
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use {
+    serde::{Deserialize, Serialize},
+    serde_repr::{Deserialize_repr, Serialize_repr},
+};
 
 #[derive(Serialize_repr, Deserialize_repr, Debug, Default)]
 #[repr(u8)]
@@ -24,18 +26,26 @@ pub enum StatusDisplayType {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ActivityTimestamps {
-    pub end: Option<u64>,
-    pub start: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub end: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 #[serde(default)]
 pub struct ActivityAssets {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub large_image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub large_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub large_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub small_image: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub small_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub small_url: Option<String>,
 }
 

@@ -1,11 +1,8 @@
-use std::path::Path;
-use tracing::trace;
-
-use serde::{Serialize, de::DeserializeOwned};
-
-use crate::{
-    pipe::{errors::PipeError, transport::PipeTransport},
-    rpc::{errors::TransportError, op_code::OpCode},
+use {
+    super::{errors::TransportError, op_code::OpCode},
+    crate::pipe::{errors::PipeError, transport::PipeTransport},
+    serde::{Serialize, de::DeserializeOwned},
+    std::path::Path,
 };
 
 pub struct RpcTransport {
@@ -62,7 +59,7 @@ impl RpcTransport {
         self.buffer.resize(len, 0);
         self.pipe.read_exact(&mut self.buffer).await?;
 
-        trace!(
+        tracing::trace!(
             "received: op={:?} len={} payload={:?}",
             op,
             len,
