@@ -64,6 +64,9 @@ impl GamePresence {
                     GameState::Landed(Some(body)) => details = Some(format!("Landed on {}", body)),
                     GameState::Landed(None) => details = Some("Landed".to_string()),
                     GameState::OnCarrier => details = Some("On carrier".to_string()),
+                    GameState::JumpingTo(system) => {
+                        details = Some(format!("Jumping to {}", system))
+                    }
                 },
                 Some(Event::LoadoutUpdate(loadout)) => match loadout {
                     Loadout::OnFoot => state = Some("On foot".to_string()),

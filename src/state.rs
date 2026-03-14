@@ -7,4 +7,5 @@ pub enum GameState {
     OnCarrier,
     Dead,
     Landed(Option<String>),
+    JumpingTo(String),
 }
