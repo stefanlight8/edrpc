@@ -1,108 +1,107 @@
 use {
     crate::{
-        discord::activity::{Activity, ActivityTimestamps},
-        discord::rpc::client::RpcClient,
+        discord::{
+            activity::{Activity, ActivityType},
+            rpc::client::RpcClient,
+        },
         loadout::Loadout,
-        rpc::Event,
+        message::Message,
         state::GameState,
     },
-    anyhow::Result,
-    std::sync::Arc,
-    tokio::{
-        select,
-        sync::{Notify, mpsc::Receiver},
-    },
+    anyhow::{Result, anyhow},
+    std::convert::Infallible,
+    tokio::sync::mpsc::Receiver,
 };
 
-pub struct GamePresence {
-    event_rx: Receiver<Event>,
-    rpc_client: RpcClient,
+pub async fn presence(
+    mut rpc_client: RpcClient,
+    mut message_rx: Receiver<Message>,
+) -> Result<Infallible> {
+    rpc_client.handshake().await?;
+
+    let mut session = Session::default();
+    loop {
+        let Some(message) = message_rx.recv().await else {
+            return Err(anyhow!("message channel closed"));
+            // FIXME: there's should be break, but Rust forces to return Ok(with something)
+            // but with Infallible we can't return nothing, so we forced to return Err
+            // (failed successfully to gracefully shutdown)
+        };
+
+        tracing::trace!("received message: {:?}", message);
+
+        match message {
+            Message::Session { created_at } => {}
+            Message::Update { state, loadout } => session.patch(state, loadout),
+        }
+
+        let activity = Activity {
+            name: "Elite Dangerous".into(),
+            activity_type: ActivityType::Playing,
+            state: Some(session.state.to_string()),
+            details: Some(session.loadout.to_string()),
+            ..Default::default()
+        };
+
+        rpc_client.set_activity(activity).await?;
+    }
 }
 
-impl GamePresence {
-    pub fn new(event_rx: Receiver<Event>, rpc_client: RpcClient) -> Self {
+struct Session {
+    state: GameState,
+    loadout: Loadout,
+}
+
+impl Default for Session {
+    fn default() -> Self {
         Self {
-            event_rx,
-            rpc_client,
+            state: GameState::Idle,
+            loadout: Loadout::Unknown,
         }
     }
+}
 
-    pub async fn start(&mut self, shutdown: Arc<Notify>) -> Result<()> {
-        self.rpc_client.handshake().await?;
-        self.update_presence(shutdown).await;
+impl Session {
+    fn patch(&mut self, state: Option<GameState>, loadout: Option<Loadout>) {
+        if let Some(state) = state {
+            self.state = state
+        }
 
-        Ok(())
+        if let Some(loadout) = loadout {
+            self.loadout = loadout
+        }
     }
+}
 
-    async fn update_presence(&mut self, shutdown: Arc<tokio::sync::Notify>) {
-        let mut state: Option<String> = None;
-        let mut details: Option<String> = None;
-        let mut created_at: Option<i64> = None;
+impl ToString for GameState {
+    fn to_string(&self) -> String {
+        match self {
+            GameState::Idle => "Idle".to_string(),
+            GameState::Dead => "Dead".to_string(),
+            GameState::Approaching(location) => format!("Approaching {}", location),
+            GameState::Docked(station_name) => format!("Docked in {}", station_name),
+            GameState::JumpingTo(star_system) => format!("Jumping to {}", star_system),
+            GameState::Supercruise(Some(star_system)) => format!("Supercruise in {}", star_system),
+            GameState::Supercruise(..) => "Supercruise".to_string(),
+            GameState::Landed(Some(body)) => format!("Landed on {}", body),
+            GameState::Landed(..) => "Landed".to_string(),
+            GameState::Location(location) => location.clone(),
+            GameState::OnCarrier => "On fleet carrier".to_string(),
+        }
+    }
+}
 
-        loop {
-            let event = select! {
-                event = self.event_rx.recv() => event,
-                _ = shutdown.notified() => {
-                    tracing::info!("shutdown received, stopping update_presence");
-                    break;
-                }
-            };
-
-            match event {
-                Some(Event::GameStateUpdate(state)) => match state {
-                    GameState::Idle => details = Some("Idle".to_string()),
-                    GameState::Docked(station) => details = Some(format!("Docked in {}", station)),
-                    GameState::Location(location) => details = Some(location),
-                    GameState::Supercruise(Some(system)) => {
-                        details = Some(format!("Supercruise in {}", system));
-                    }
-                    GameState::Supercruise(None) => details = Some("Supercruise".to_string()),
-                    GameState::Approaching(location) => {
-                        details = Some(format!("Approaching {}", location))
-                    }
-                    GameState::Dead => details = Some("Dead".to_string()),
-                    GameState::Landed(Some(body)) => details = Some(format!("Landed on {}", body)),
-                    GameState::Landed(None) => details = Some("Landed".to_string()),
-                    GameState::OnCarrier => details = Some("On carrier".to_string()),
-                    GameState::JumpingTo(system) => {
-                        details = Some(format!("Jumping to {}", system))
-                    }
-                },
-                Some(Event::LoadoutUpdate(loadout)) => match loadout {
-                    Loadout::OnFoot => state = Some("On foot".to_string()),
-                    Loadout::Ship {
-                        ship_name, ship_id, ..
-                    } => state = Some(format!("{} ({})", ship_name, ship_id)),
-                    Loadout::Srv => state = Some("On SRV".to_string()),
-                    _ => state = None,
-                },
-                Some(Event::SessionUpdate {
-                    created_at: datetime,
-                }) => {
-                    let timestamp = datetime.timestamp();
-
-                    created_at = Some(timestamp);
-                }
-                None => {
-                    tracing::warn!("event channel closed");
-                    break;
-                }
-            };
-
-            let _ = self
-                .rpc_client
-                .set_activity(Activity {
-                    name: "Elite Dangerous".to_string(),
-                    state: state.clone(),
-                    details: details.clone(),
-                    timestamps: Some(ActivityTimestamps {
-                        start: created_at.clone(),
-                        end: None,
-                    }),
-                    ..Default::default()
-                })
-                .await
-                .inspect_err(|err| tracing::warn!("failed to update activity: {}", err));
+impl ToString for Loadout {
+    fn to_string(&self) -> String {
+        match self {
+            Loadout::Ship {
+                ship_type,
+                ship_name,
+                ship_id,
+            } => format!("{} ({}, {})", ship_type, ship_name, ship_id),
+            Loadout::Srv => "On SRV".to_string(),
+            Loadout::OnFoot => "On foot".to_string(),
+            Loadout::Unknown => "".to_string(),
         }
     }
 }

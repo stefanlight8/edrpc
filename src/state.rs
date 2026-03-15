@@ -1,11 +1,12 @@
+#[derive(Debug)]
 pub enum GameState {
-    Idle,
-    Supercruise(Option<String>),
-    Location(String),
-    Docked(String),
     Approaching(String),
-    OnCarrier,
     Dead,
-    Landed(Option<String>),
+    Docked(String),
+    Idle,
     JumpingTo(String),
+    Landed(Option<String>),
+    Location(String),
+    OnCarrier,
+    Supercruise(Option<String>),
 }
