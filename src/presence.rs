@@ -8,24 +8,17 @@ use {
         message::Message,
         state::GameState,
     },
-    anyhow::{Result, anyhow},
-    std::convert::Infallible,
+    anyhow::Result,
     tokio::sync::mpsc::Receiver,
 };
 
-pub async fn presence(
-    mut rpc_client: RpcClient,
-    mut message_rx: Receiver<Message>,
-) -> Result<Infallible> {
+pub async fn presence(mut rpc_client: RpcClient, mut message_rx: Receiver<Message>) -> Result<()> {
     rpc_client.handshake().await?;
 
     let mut session = Session::default();
     loop {
         let Some(message) = message_rx.recv().await else {
-            return Err(anyhow!("message channel closed"));
-            // FIXME: there's should be break, but Rust forces to return Ok(with something)
-            // but with Infallible we can't return nothing, so we forced to return Err
-            // (failed successfully to gracefully shutdown)
+            return Ok(());
         };
 
         tracing::trace!("received message: {:?}", message);

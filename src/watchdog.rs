@@ -10,7 +10,7 @@ use {
         state::GameState,
     },
     anyhow::Result,
-    std::{convert::Infallible, path::PathBuf, time::Duration},
+    std::{path::PathBuf, time::Duration},
     tokio::{sync::mpsc::Sender, time::sleep},
 };
 
@@ -185,7 +185,7 @@ fn event_to_message(event: Event) -> Option<Message> {
     }
 }
 
-pub async fn watchdog(journals_path: PathBuf, message_tx: Sender<Message>) -> Result<Infallible> {
+pub async fn watchdog(journals_path: PathBuf, message_tx: Sender<Message>) -> Result<()> {
     let mut journal_path = get_last_journal(&journals_path)?;
     let mut journal_reader = JournalReader::open(&journal_path).await?;
     tracing::debug!("polling {:?}", journals_path);
@@ -196,7 +196,7 @@ pub async fn watchdog(journals_path: PathBuf, message_tx: Sender<Message>) -> Re
                 if message_tx.send(message).await.is_err() {
                     tracing::info!("message channel is closed, stopping");
 
-                    break;
+                    return Ok(());
                 };
             }
         }
