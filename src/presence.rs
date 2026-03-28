@@ -1,7 +1,7 @@
 use {
     crate::{
         discord::{
-            activity::{Activity, ActivityType},
+            activity::{Activity, ActivityAssets, ActivityType},
             rpc::client::RpcClient,
         },
         loadout::Loadout,
@@ -33,6 +33,10 @@ pub async fn presence(mut rpc_client: RpcClient, mut message_rx: Receiver<Messag
             activity_type: ActivityType::Playing,
             state: Some(session.state.to_string()),
             details: Some(session.loadout.to_string()),
+            assets: Some(ActivityAssets {
+                large_image: Some("elite_dangerous_logo".into()),
+                ..Default::default()
+            }),
             ..Default::default()
         };
 

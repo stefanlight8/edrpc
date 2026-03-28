@@ -92,6 +92,7 @@ fn event_to_message(event: Event) -> Option<Message> {
             station_name,
             ..
         } => Some(if docked && let Some(station_name) = station_name {
+            println!("{} {} {} {:?}", body, docked, on_foot, station_name);
             Message::Update {
                 state: Some(GameState::Docked(station_name)),
                 loadout: None,
@@ -153,6 +154,10 @@ fn event_to_message(event: Event) -> Option<Message> {
             state: Some(GameState::Location(name)),
             loadout: None,
         }),
+        Event::Docked { station_name, .. } => Some(Message::Update {
+            state: Some(GameState::Docked(station_name)),
+            loadout: None,
+        }),
         Event::Undocked { station_name } => Some(Message::Update {
             state: Some(GameState::Location(station_name)),
             loadout: None,
@@ -162,20 +167,16 @@ fn event_to_message(event: Event) -> Option<Message> {
             loadout: None,
         }),
         Event::StartJump {
-            jump_type: JumpType::Supercruise,
-            star_system: Some(star_system),
-        } => Some(Message::Update {
-            state: Some(GameState::Supercruise(Some(star_system))),
-            loadout: None,
-        }),
-        Event::StartJump {
             jump_type: JumpType::Hyperspace,
             star_system: Some(star_system),
         } => Some(Message::Update {
             state: Some(GameState::JumpingTo(star_system)),
             loadout: None,
         }),
-
+        Event::FSDJump { body, .. } => Some(Message::Update {
+            state: Some(GameState::Location(body)),
+            loadout: None,
+        }),
         Event::Unknown => None,
         unhandled => {
             tracing::trace!("[warning] unhandled event variant: {:?}", unhandled);

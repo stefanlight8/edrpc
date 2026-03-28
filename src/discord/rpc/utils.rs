@@ -11,30 +11,24 @@ pub fn get_nonce() -> String {
         .to_string()
 }
 
-pub fn get_discord_ipc_pipe() -> PathBuf {
+pub fn get_discord_ipc_pipe() -> Option<PathBuf> {
     #[cfg(windows)]
-    {
-        return PathBuf::from(r"\\?\pipe\discord-ipc-0");
-    }
+    let base = PathBuf::from(r"\\?\pipe");
 
     #[cfg(target_os = "linux")]
-    {
-        if let Ok(dir) = env::var("XDG_RUNTIME_DIR") {
-            return PathBuf::from(dir).join("discord-ipc-0");
-        }
-
-        return PathBuf::from("/tmp").join("discord-ipc-0");
-    }
+    let base = PathBuf::from(env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()));
 
     #[cfg(target_os = "macos")]
-    {
-        if let Ok(dir) = env::var("TMPDIR") {
-            return PathBuf::from(dir).join("discord-ipc-0");
-        }
+    let base = PathBuf::from(env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into()));
 
-        return PathBuf::from("/tmp").join("discord-ipc-0");
+    let mut last = None;
+
+    for i in 0..10 {
+        let candidate = base.join(format!("discord-ipc-{}", i));
+        if candidate.exists() {
+            last = Some(candidate);
+        }
     }
 
-    #[allow(unreachable_code)]
-    PathBuf::new()
+    last
 }
