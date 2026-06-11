@@ -1,56 +1,125 @@
+mod game;
+mod loadout;
+mod state;
+
 use {
-    crate::{
-        discord::rpc::{client::RpcClient, utils::get_discord_ipc_pipe},
-        message::Message,
-        presence::presence,
-        watchdog::watchdog,
+    daito::{
+        api::activity::{Activity, ActivityAssets},
+        rpc::client::RpcClient,
     },
-    anyhow::{Context, Result},
-    chrono::Local,
-    std::{fs::File, path::PathBuf},
-    tokio::{select, sync::mpsc},
+    std::{
+        env, error::Error, os::unix::net::UnixStream, path::PathBuf, process::id, time::Duration,
+    },
+    tokio::time::sleep,
     tracing_subscriber::EnvFilter,
 };
 
-mod discord;
-mod elite;
-mod loadout;
-mod message;
-mod pipe;
-mod presence;
-mod state;
-mod utils;
-mod watchdog;
+pub fn get_discord_ipc_pipe() -> Option<PathBuf> {
+    #[cfg(target_os = "linux")]
+    let base = PathBuf::from(std::env::var("XDG_RUNTIME_DIR").unwrap_or_else(|_| "/tmp".into()));
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    dotenvy::dotenv()?;
+    #[cfg(target_os = "macos")]
+    let base = PathBuf::from(std::env::var("TMPDIR").unwrap_or_else(|_| "/tmp".into()));
 
-    let log_dir = PathBuf::from("logs");
-    if !log_dir.exists() {
-        std::fs::create_dir_all(&log_dir)?;
+    for i in 0..10 {
+        let path = base.join(format!("discord-ipc-{}", i));
+
+        if UnixStream::connect(&path).is_ok() {
+            return Some(path);
+        }
     }
 
-    let file_name = format!("{}.log", Local::now().format("%Y-%m-%dT%H:%M:%S%:z"));
-    let log_file_path = log_dir.join(file_name);
-    let log_file = File::create(log_file_path)?;
+    None
+}
 
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     tracing_subscriber::fmt()
-        .with_writer(log_file)
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
-    let (message_tx, message_rx) = mpsc::channel::<Message>(16);
-    let journals_path = PathBuf::from(dotenvy::var("JOURNALS_PATH")?);
-    let rpc_client = RpcClient::open(dotenvy::var("CLIENT_ID")?, get_discord_ipc_pipe().unwrap())
-        .await
-        .with_context(|| "failed to open rpc client")?;
+    let pipe = get_discord_ipc_pipe().expect("expected pipe");
+    tracing::info!("using pipe: {}", pipe.display());
 
-    select! {
-        _ = watchdog(journals_path, message_tx) => {},
-        _ = presence(rpc_client, message_rx) => {},
-        _ = tokio::signal::ctrl_c() => {}
+    let mut client =
+        RpcClient::open(env::var("CLIENT_ID").expect("expected CLIENT_ID"), pipe).await?;
+    client.handshake().await?;
+
+    let activities = vec![
+        Activity {
+            name: "Elite Dangerous".to_string(),
+            details: Some("In game".to_string()),
+            assets: Some(ActivityAssets {
+                large_image: Some("elite-dangerous".to_string()),
+                large_text: Some("Elite Dangerous".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        Activity {
+            name: "Elite Dangerous".to_string(),
+            details: Some("Supercruise".to_string()),
+            state: Some("San Tu".to_string()),
+            assets: Some(ActivityAssets {
+                large_image: Some("ship".to_string()),
+                large_text: Some("Fer-de-lance (Enma)".to_string()),
+                small_image: Some("elite-dangerous-minimalistic".to_string()),
+                small_text: Some("Elite Dangerous".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        Activity {
+            name: "Elite Dangerous".to_string(),
+            details: Some("Docked".to_string()),
+            state: Some("Chomsky Station".to_string()),
+            assets: Some(ActivityAssets {
+                large_image: Some("ship".to_string()),
+                large_text: Some("Fer-de-lance (Enma)".to_string()),
+                small_image: Some("elite-dangerous-minimalistic".to_string()),
+                small_text: Some("Elite Dangerous".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        Activity {
+            name: "Elite Dangerous".to_string(),
+            details: Some("In SRV".to_string()),
+            state: Some("San Tu 1 a".to_string()),
+            assets: Some(ActivityAssets {
+                large_image: Some("srv".to_string()),
+                large_text: Some("Scorpio".to_string()),
+                small_image: Some("elite-dangerous-minimalistic".to_string()),
+                small_text: Some("Elite Dangerous".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+        Activity {
+            name: "Elite Dangerous".to_string(),
+            details: Some("On foot".to_string()),
+            state: Some("San Tu 1 a".to_string()),
+            assets: Some(ActivityAssets {
+                large_image: Some("helmet".to_string()),
+                large_text: Some("Artemis".to_string()),
+                small_image: Some("elite-dangerous-minimalistic".to_string()),
+                small_text: Some("Elite Dangerous".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        },
+    ];
+    let mut position = 0;
+    loop {
+        client
+            .set_activity(id(), activities.get(position).unwrap().clone())
+            .await?;
+
+        position += 1;
+        if position == activities.len() {
+            position = 0
+        }
+
+        sleep(Duration::from_secs(5)).await;
     }
-
-    Ok(())
 }

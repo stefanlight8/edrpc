@@ -1,11 +1,12 @@
-#[derive(Debug)]
 pub enum Loadout {
-    OnFoot,
     Ship {
         ship_type: String,
-        ship_name: String,
-        ship_id: String,
+        ship_name: Option<String>,
     },
-    Srv,
-    Unknown,
+    Srv {
+        srv_type: String,
+    },
+    Suit {
+        suit_type: String,
+    },
 }
