@@ -1,3 +1,10 @@
+use chrono::{DateTime, Utc};
+use edjr::JournalEvent;
+
+#[derive(Debug)]
 pub enum Message {
-    StateUpdate,
+    SessionStart { timestamp: DateTime<Utc> },
+    SessionEnd,
+    JournalEvent(JournalEvent),
+    JournalEvents(Vec<JournalEvent>),
 }
