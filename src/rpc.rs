@@ -6,7 +6,9 @@ use daito::{
     rpc::client::RpcClient,
 };
 
-use crate::{loadout::Loadout, message::Message, session::GameSession, state::GameState};
+use crate::{
+    loadout::Loadout, location::Location, message::Message, session::GameSession, state::GameState,
+};
 
 pub struct Rpc {
     pid: u32,
@@ -93,8 +95,8 @@ impl Rpc {
                 }
                 Loadout::Suit { suit_type } => {
                     activity.assets = Some(ActivityAssets {
-                        large_image: Some("srv".to_string()),
-                        large_text: Some(format!("{}", suit_type)),
+                        large_image: Some("helmet".to_string()),
+                        large_text: suit_type,
                         small_image: Some("elite-dangerous-minimalistic".to_string()),
                         small_text: Some("Elite Dangerous".to_string()),
                         ..Default::default()
@@ -107,7 +109,30 @@ impl Rpc {
                 GameState::InGame => {
                     activity.state = Some("In game".to_string());
                 }
-                _ => (),
+                GameState::Docked => {
+                    activity.state = Some("Docked".to_string());
+                }
+                GameState::Dead => {
+                    activity.state = Some("Dead".to_string());
+                }
+                GameState::Landed => {
+                    activity.state = Some("Landed".to_string());
+                }
+                GameState::Supercruise => {
+                    activity.state = Some("Supercruise".to_string());
+                }
+                _ => activity.state = None,
+            }
+
+            match game_session.location {
+                Location::Body { body } => activity.details = Some(body),
+                Location::Settlement { name } => activity.details = Some(name),
+                Location::Station { station_name } => activity.details = Some(station_name),
+                Location::System { star_system } => activity.details = Some(star_system),
+                Location::UssSignal { threat, uss_type } => {
+                    activity.details = Some(format!("{uss_type} {threat}"))
+                }
+                Location::Unkonwn => activity.details = None,
             }
 
             self.client.set_activity(self.pid.clone(), activity).await?;

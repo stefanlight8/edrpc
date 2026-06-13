@@ -1,6 +1,7 @@
 mod game;
 mod journal;
 mod loadout;
+mod location;
 mod message;
 mod rpc;
 mod session;

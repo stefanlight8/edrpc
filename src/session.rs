@@ -1,11 +1,12 @@
 use chrono::{DateTime, Utc};
 use edjr::JournalEvent;
 
-use crate::{loadout::Loadout, state::GameState};
+use crate::{loadout::Loadout, location::Location, state::GameState};
 
 #[derive(Debug, Clone)]
 pub struct GameSession {
     pub state: GameState,
+    pub location: Location,
     pub loadout: Loadout,
     pub timestamp: DateTime<Utc>,
 }
@@ -15,6 +16,7 @@ impl GameSession {
         GameSession {
             timestamp,
             state: GameState::default(),
+            location: Location::default(),
             loadout: Loadout::default(),
         }
     }
@@ -23,6 +25,7 @@ impl GameSession {
         match event {
             event => {
                 self.state.update(&event);
+                self.location.update(&event);
                 self.loadout.update(&event)
             }
         }

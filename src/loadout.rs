@@ -8,7 +8,7 @@ pub enum Loadout {
     },
     Srv,
     Suit {
-        suit_type: String,
+        suit_type: Option<String>,
     },
     #[default]
     Unknown,
@@ -27,11 +27,22 @@ impl Loadout {
             }
             JournalEvent::SuitLoadout(event) => {
                 *self = Loadout::Suit {
-                    suit_type: event.suit_name.clone(),
+                    suit_type: Some(event.suit_name.clone()),
                 }
             }
-            JournalEvent::Disembark(event) if event.srv => {
-                *self = Loadout::Srv;
+            JournalEvent::Disembark(event) => {
+                if event.in_srv {
+                    *self = Loadout::Srv;
+                } else {
+                    *self = Loadout::Suit { suit_type: None }
+                }
+            }
+            JournalEvent::Location(event) => {
+                if event.in_srv {
+                    *self = Loadout::Srv;
+                } else if event.on_foot {
+                    *self = Loadout::Suit { suit_type: None }
+                }
             }
             _ => (),
         }
