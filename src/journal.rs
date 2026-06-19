@@ -2,7 +2,7 @@ use std::{path::PathBuf, time::Duration};
 
 use anyhow::Result;
 use chrono::{TimeDelta, Utc};
-use edjr::{AsyncRead, Journal, JournalEvent};
+use edjr::{AsyncRead, Journal, JournalEntry, JournalEvent};
 use tokio::{fs::File, sync::mpsc::Sender, time::sleep};
 
 use crate::{message::Message, utils::get_last_journal};
@@ -25,82 +25,68 @@ impl JournalWatcher {
     pub async fn run(&mut self, journals_path: PathBuf) -> Result<()> {
         tracing::info!("listening {}", journals_path.display());
 
+        let mut current_path = None;
+        let mut last_path = None;
+        let mut reader = None;
+
         loop {
             let last_journal = get_last_journal(&journals_path)?;
 
-            if self.last_path.as_ref() == Some(&last_journal) {
-                sleep(Duration::from_secs(10)).await;
+            if Some(&last_journal) == last_path.as_ref() {
+                sleep(Duration::from_secs(5)).await;
                 continue;
             }
 
-            if self.current_path.is_none() || (self.current_path.as_ref() != Some(&last_journal)) {
+            if current_path.as_ref() != Some(&last_journal) {
                 tracing::info!("switching to {}", last_journal.display());
-                self.current_path = Some(last_journal);
-                self.last_path = None;
-            }
 
-            let mut journal = Journal::<File>::open(self.current_path.as_ref().unwrap()).await?;
-            tracing::debug!("watching journal");
-            let entries = journal.read_all().await?;
+                let mut journal = Journal::<File>::open(&last_journal).await?;
+                let entries = journal.read_all().await?;
 
-            if let Some(entry) = entries.first() {
-                if let Some(entry) = entries.last() {
-                    if Utc::now() - entry.timestamp > TimeDelta::minutes(1) {
-                        tracing::debug!(
-                            "journal probably dead, because last entry is too old ({}), waiting until new journal",
-                            Utc::now() - entry.timestamp
-                        );
-                        self.last_path = self.current_path.clone();
-                        self.current_path = None;
-                        continue;
-                    }
-                }
+                let Some(JournalEntry {
+                    timestamp,
+                    event: JournalEvent::Fileheader(_),
+                }) = entries.first()
+                else {
+                    sleep(Duration::from_secs(5)).await;
+                    continue;
+                };
 
-                if let JournalEvent::Fileheader(_) = &entry.event {
-                    self.tx
-                        .send(Message::SessionStart {
-                            timestamp: entry.timestamp,
-                        })
-                        .await?;
-                } else {
+                if let Some(JournalEntry {
+                    timestamp: _,
+                    event: JournalEvent::Shutdown,
+                }) = entries.last()
+                {
+                    last_path = Some(last_journal);
                     continue;
                 }
 
                 self.tx
-                    .send(Message::JournalEvents(
-                        entries.into_iter().map(|entry| entry.event).collect(),
-                    ))
+                    .send(Message::SessionStart {
+                        timestamp: *timestamp,
+                    })
                     .await?;
 
-                let mut reader = journal.reader();
-                loop {
-                    let entries = reader.read_all().await?;
+                reader = Some(journal.reader());
+                current_path = Some(last_journal);
+            }
 
-                    if let Some(entry) = entries.last() {
-                        if Utc::now() - entry.timestamp > TimeDelta::minutes(5) {
-                            self.last_path = self.current_path.clone();
-                            self.current_path = None;
+            if let Some(current_reader) = reader.as_mut() {
+                for entry in current_reader.read_all().await? {
+                    match entry.event {
+                        JournalEvent::Shutdown => {
+                            tracing::debug!("shutdown received, journal end");
+                            self.tx.send(Message::SessionEnd).await?;
+                            last_path = current_path.take();
+                            reader = None;
                             break;
                         }
+                        event => self.tx.send(Message::JournalEvent(event)).await?,
                     }
-
-                    for entry in entries {
-                        match entry.event {
-                            JournalEvent::Shutdown => {
-                                tracing::debug!("shutdown received, journal end");
-                                self.last_path = self.current_path.clone();
-                                self.current_path = None;
-                                self.tx.send(Message::SessionEnd).await?
-                            }
-                            event => self.tx.send(Message::JournalEvent(event)).await?,
-                        }
-                    }
-
-                    sleep(Duration::from_secs(10)).await;
                 }
             }
 
-            sleep(Duration::from_secs(10)).await;
+            sleep(Duration::from_secs(5)).await;
         }
     }
 }

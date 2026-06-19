@@ -9,7 +9,7 @@ mod state;
 mod utils;
 
 use {
-    crate::{journal::JournalWatcher, message::Message, rpc::Rpc, utils::get_discord_ipc_pipe},
+    crate::{journal::JournalWatcher, rpc::Rpc, utils::get_discord_ipc_pipe},
     std::{env, error::Error},
     tokio::{signal::ctrl_c, sync::mpsc},
     tracing_subscriber::EnvFilter,
